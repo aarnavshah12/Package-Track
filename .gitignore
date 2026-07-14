@@ -1,0 +1,19 @@
+# secrets
+.env
+esp32_lockbox/credentials.h
+
+# runtime artifacts
+events/
+state.json
+state.tmp
+
+# personal test photos (large + they are photos of the house)
+Test Images/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

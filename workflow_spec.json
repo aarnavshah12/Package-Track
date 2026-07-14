@@ -1,0 +1,228 @@
+{
+  "specification": {
+    "version": "1.0",
+    "inputs": [
+      {"type": "WorkflowImage", "name": "image"},
+      {"type": "WorkflowParameter", "name": "model_id", "default_value": "package-goilk-zcar8/1"},
+      {"type": "WorkflowParameter", "name": "zone", "default_value": [[0, 0], [9999, 0], [9999, 9999], [0, 9999]]},
+      {"type": "WorkflowParameter", "name": "min_confidence", "default_value": 0.4},
+      {"type": "WorkflowParameter", "name": "person_confidence", "default_value": 0.45},
+      {"type": "WorkflowParameter", "name": "package_confidence", "default_value": 0.59},
+      {"type": "WorkflowParameter", "name": "raw_classes", "default_value": ["0", "80"]},
+      {"type": "WorkflowParameter", "name": "client_event", "default_value": "none"},
+      {"type": "WorkflowParameter", "name": "disable_upload", "default_value": true},
+      {"type": "WorkflowParameter", "name": "notify_email", "default_value": "aarnav.shah@roboflow.com"}
+    ],
+    "steps": [
+      {
+        "type": "roboflow_core/roboflow_object_detection_model@v3",
+        "name": "detection_model",
+        "images": "$inputs.image",
+        "model_id": "$inputs.model_id",
+        "confidence_mode": "custom",
+        "custom_confidence": "$inputs.min_confidence"
+      },
+      {
+        "type": "roboflow_core/detections_filter@v1",
+        "name": "raw_class_filter",
+        "predictions": "$steps.detection_model.predictions",
+        "operations": [
+          {
+            "type": "DetectionsFilter",
+            "filter_operation": {
+              "type": "StatementGroup",
+              "operator": "and",
+              "statements": [
+                {
+                  "type": "BinaryStatement",
+                  "left_operand": {
+                    "type": "DynamicOperand",
+                    "operand_name": "_",
+                    "operations": [{"type": "ExtractDetectionProperty", "property_name": "class_name"}]
+                  },
+                  "comparator": {"type": "in (Sequence)"},
+                  "right_operand": {"type": "DynamicOperand", "operand_name": "allowed_classes"},
+                  "negate": false
+                }
+              ]
+            }
+          }
+        ],
+        "operations_parameters": {"allowed_classes": "$inputs.raw_classes"}
+      },
+      {
+        "type": "roboflow_core/detections_transformation@v1",
+        "name": "rename_classes",
+        "predictions": "$steps.raw_class_filter.predictions",
+        "operations": [
+          {
+            "type": "DetectionsRename",
+            "class_map": {"0": "person", "80": "package"},
+            "strict": false
+          }
+        ],
+        "operations_parameters": {}
+      },
+      {
+        "type": "roboflow_core/detections_filter@v1",
+        "name": "zone_filter",
+        "predictions": "$steps.rename_classes.predictions",
+        "operations": [
+          {
+            "type": "DetectionsFilter",
+            "filter_operation": {
+              "type": "StatementGroup",
+              "operator": "and",
+              "statements": [
+                {
+                  "type": "BinaryStatement",
+                  "left_operand": {
+                    "type": "DynamicOperand",
+                    "operand_name": "_",
+                    "operations": [{"type": "ExtractDetectionProperty", "property_name": "center"}]
+                  },
+                  "comparator": {"type": "(Detection) in zone"},
+                  "right_operand": {"type": "DynamicOperand", "operand_name": "zone"},
+                  "negate": false
+                }
+              ]
+            }
+          }
+        ],
+        "operations_parameters": {"zone": "$inputs.zone"}
+      },
+      {
+        "type": "Package_Lockbox_Facts",
+        "name": "facts",
+        "zone_detections": "$steps.zone_filter.predictions",
+        "all_detections": "$steps.rename_classes.predictions",
+        "person_confidence": "$inputs.person_confidence",
+        "package_confidence": "$inputs.package_confidence",
+        "client_event": "$inputs.client_event"
+      },
+      {
+        "type": "roboflow_core/bounding_box_visualization@v1",
+        "name": "bbox_vis",
+        "image": "$inputs.image",
+        "predictions": "$steps.rename_classes.predictions"
+      },
+      {
+        "type": "roboflow_core/label_visualization@v1",
+        "name": "label_vis",
+        "image": "$steps.bbox_vis.image",
+        "predictions": "$steps.rename_classes.predictions",
+        "text": "Class and Confidence"
+      },
+      {
+        "type": "roboflow_core/roboflow_vision_events@v1",
+        "name": "vision_events",
+        "input_image": "$inputs.image",
+        "output_image": "$steps.label_vis.image",
+        "predictions": "$steps.rename_classes.predictions",
+        "event_type": "custom",
+        "solution": "nz0ouOXWenOd5EfpA7rI",
+        "custom_value": "$steps.facts.event_ack",
+        "custom_metadata": {
+          "person_in_zone": "$steps.facts.person_in_zone",
+          "package_in_zone": "$steps.facts.package_in_zone",
+          "person_with_package": "$steps.facts.person_with_package",
+          "person_count": "$steps.facts.person_count",
+          "package_count": "$steps.facts.package_count",
+          "source": "lockbox-client"
+        },
+        "disable_sink": "$steps.facts.disable_events",
+        "fire_and_forget": true,
+        "cooldown_seconds": 0
+      },
+      {
+        "type": "roboflow_core/roboflow_dataset_upload@v2",
+        "name": "dataset_upload",
+        "images": "$inputs.image",
+        "predictions": "$steps.raw_class_filter.predictions",
+        "target_project": "package-goilk-zcar8",
+        "usage_quota_name": "lockbox_events_quota",
+        "data_percentage": 100.0,
+        "persist_predictions": true,
+        "registration_tags": ["lockbox-event"],
+        "labeling_batch_prefix": "lockbox_events",
+        "disable_sink": "$inputs.disable_upload",
+        "fire_and_forget": true
+      }
+    ],
+    "outputs": [
+      {"type": "JsonField", "name": "person_in_zone", "selector": "$steps.facts.person_in_zone"},
+      {"type": "JsonField", "name": "package_in_zone", "selector": "$steps.facts.package_in_zone"},
+      {"type": "JsonField", "name": "person_with_package", "selector": "$steps.facts.person_with_package"},
+      {"type": "JsonField", "name": "person_count", "selector": "$steps.facts.person_count"},
+      {"type": "JsonField", "name": "package_count", "selector": "$steps.facts.package_count"},
+      {"type": "JsonField", "name": "max_person_confidence", "selector": "$steps.facts.max_person_confidence"},
+      {"type": "JsonField", "name": "max_package_confidence", "selector": "$steps.facts.max_package_confidence"},
+      {"type": "JsonField", "name": "boxes", "selector": "$steps.facts.boxes"},
+      {"type": "JsonField", "name": "event_ack", "selector": "$steps.facts.event_ack"},
+      {"type": "JsonField", "name": "predictions", "selector": "$steps.rename_classes.predictions"},
+      {"type": "JsonField", "name": "zone_predictions", "selector": "$steps.zone_filter.predictions"},
+      {"type": "JsonField", "name": "output_image", "selector": "$steps.label_vis.image"}
+    ],
+    "dynamic_blocks_definitions": [
+      {
+        "type": "DynamicBlockDefinition",
+        "manifest": {
+          "type": "ManifestDescription",
+          "block_type": "Package_Lockbox_Facts",
+          "description": "Stateless per-frame facts for the porch lockbox: per-class confidence thresholds, zone booleans, counts, compact box list, and notification gating derived from the client-supplied event. All cross-frame state (dwell, unlock latch, grace timer, package_in_box) lives in the client because serverless HTTP execution is stateless.",
+          "inputs": {
+            "zone_detections": {
+              "type": "DynamicInputDefinition",
+              "selector_types": ["step_output"],
+              "selector_data_kind": {"step_output": ["object_detection_prediction"]}
+            },
+            "all_detections": {
+              "type": "DynamicInputDefinition",
+              "selector_types": ["step_output"],
+              "selector_data_kind": {"step_output": ["object_detection_prediction"]}
+            },
+            "person_confidence": {
+              "type": "DynamicInputDefinition",
+              "selector_types": ["input_parameter"],
+              "value_types": ["float", "integer"],
+              "default_value": 0.45,
+              "has_default_value": true
+            },
+            "package_confidence": {
+              "type": "DynamicInputDefinition",
+              "selector_types": ["input_parameter"],
+              "value_types": ["float", "integer"],
+              "default_value": 0.59,
+              "has_default_value": true
+            },
+            "client_event": {
+              "type": "DynamicInputDefinition",
+              "selector_types": ["input_parameter"],
+              "value_types": ["string"],
+              "default_value": "none",
+              "has_default_value": true
+            }
+          },
+          "outputs": {
+            "person_in_zone": {"type": "DynamicOutputDefinition", "kind": ["boolean"]},
+            "package_in_zone": {"type": "DynamicOutputDefinition", "kind": ["boolean"]},
+            "person_with_package": {"type": "DynamicOutputDefinition", "kind": ["boolean"]},
+            "person_count": {"type": "DynamicOutputDefinition", "kind": ["integer"]},
+            "package_count": {"type": "DynamicOutputDefinition", "kind": ["integer"]},
+            "max_person_confidence": {"type": "DynamicOutputDefinition", "kind": ["float"]},
+            "max_package_confidence": {"type": "DynamicOutputDefinition", "kind": ["float"]},
+            "boxes": {"type": "DynamicOutputDefinition", "kind": ["list_of_values"]},
+            "event_ack": {"type": "DynamicOutputDefinition", "kind": ["string"]},
+            "notification_message": {"type": "DynamicOutputDefinition", "kind": ["string"]},
+            "disable_email": {"type": "DynamicOutputDefinition", "kind": ["boolean"]},
+            "disable_events": {"type": "DynamicOutputDefinition", "kind": ["boolean"]}
+          }
+        },
+        "code": {
+          "type": "PythonCode",
+          "run_function_code": "def run(self, zone_detections, all_detections, person_confidence=0.45, package_confidence=0.59, client_event='none'):\n    def extract(dets):\n        items = []\n        if dets is None:\n            return items\n        xyxy = getattr(dets, 'xyxy', None)\n        if xyxy is None:\n            return items\n        names = list(dets.data.get('class_name', [])) if hasattr(dets, 'data') else []\n        confs = dets.confidence if getattr(dets, 'confidence', None) is not None else []\n        for i, box in enumerate(xyxy):\n            name = str(names[i]) if i < len(names) else ''\n            conf = float(confs[i]) if i < len(confs) else 0.0\n            x1, y1, x2, y2 = [float(v) for v in box]\n            items.append({\n                'class': name,\n                'confidence': round(conf, 4),\n                'box': {'x_min': x1, 'y_min': y1, 'x_max': x2, 'y_max': y2},\n                'center': {'x': round((x1 + x2) / 2.0, 1), 'y': round((y1 + y2) / 2.0, 1)},\n            })\n        return items\n\n    try:\n        person_confidence = float(person_confidence)\n    except Exception:\n        person_confidence = 0.45\n    try:\n        package_confidence = float(package_confidence)\n    except Exception:\n        package_confidence = 0.59\n\n    zone_items = extract(zone_detections)\n    all_items = extract(all_detections)\n\n    persons = [d for d in zone_items if d['class'] == 'person' and d['confidence'] >= person_confidence]\n    packages = [d for d in zone_items if d['class'] == 'package' and d['confidence'] >= package_confidence]\n\n    person_in_zone = len(persons) > 0\n    package_in_zone = len(packages) > 0\n    person_with_package = person_in_zone and package_in_zone\n    max_person_confidence = max([d['confidence'] for d in persons], default=0.0)\n    max_package_confidence = max([d['confidence'] for d in packages], default=0.0)\n\n    valid_events = {'delivery_confirmed', 'delivery_failed_package_on_ground'}\n    event_ack = client_event if client_event in valid_events else 'none'\n    notify = event_ack != 'none'\n\n    facts_line = 'Frame facts: persons_in_zone={}, packages_in_zone={}, max_person_confidence={:.2f}, max_package_confidence={:.2f}.'.format(len(persons), len(packages), max_person_confidence, max_package_confidence)\n    if event_ack == 'delivery_confirmed':\n        message = 'Package lockbox: DELIVERY CONFIRMED. The porch zone is clear after the unlock grace window, so the package is assumed to be inside the lockbox. ' + facts_line + ' The annotated frame is attached.'\n    elif event_ack == 'delivery_failed_package_on_ground':\n        message = 'Package lockbox: DELIVERY FAILED - PACKAGE LEFT ON GROUND. A package is still visible in the porch zone after the unlock grace window. It may be sitting outside the lockbox. ' + facts_line + ' The annotated frame is attached.'\n    else:\n        message = 'Package lockbox: no event for this frame. ' + facts_line\n\n    return {\n        'person_in_zone': bool(person_in_zone),\n        'package_in_zone': bool(package_in_zone),\n        'person_with_package': bool(person_with_package),\n        'person_count': len(persons),\n        'package_count': len(packages),\n        'max_person_confidence': float(max_person_confidence),\n        'max_package_confidence': float(max_package_confidence),\n        'boxes': all_items,\n        'event_ack': event_ack,\n        'notification_message': message,\n        'disable_email': not notify,\n        'disable_events': not notify,\n    }"
+        }
+      }
+    ]
+  }
+}
