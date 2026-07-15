@@ -45,7 +45,7 @@ final class EventStore {
     func record(event: String, image: UIImage?) {
         let id = UUID().uuidString
         let file = "\(id).jpg"
-        if let jpeg = image?.jpegData(compressionQuality: 0.85) {
+        if let jpeg = image?.eventJPEG() {
             try? jpeg.write(to: dir.appendingPathComponent(file))
         }
         events.insert(LockboxEvent(id: id, event: event, date: Date(), imageFile: file), at: 0)
@@ -57,5 +57,14 @@ final class EventStore {
 
     func image(for event: LockboxEvent) -> UIImage? {
         UIImage(contentsOfFile: dir.appendingPathComponent(event.imageFile).path)
+    }
+}
+
+
+extension UIImage {
+    /// Event photos are records, not wallpapers: ~960px and modest quality
+    /// keeps each one around 100-150 KB instead of megabytes.
+    func eventJPEG() -> Data? {
+        resizedToMaxDimension(960).jpegData(compressionQuality: 0.6)
     }
 }

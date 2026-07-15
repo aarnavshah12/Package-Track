@@ -131,7 +131,15 @@ const server = http.createServer(async (req, res) => {
       fs.writeFileSync(path.join(IMAGES_DIR, imageFile), Buffer.from(payload.image_b64, "base64"));
     }
     events.unshift({ id, event: payload.event || "unknown", at: Date.now(), imageFile });
-    fs.writeFileSync(EVENTS_FILE, JSON.stringify(events.slice(0, 500), null, 1));
+    // Keep the newest 200; delete the photos of anything evicted so disk
+    // usage stays bounded on small hosts.
+    const kept = events.slice(0, 200);
+    for (const evicted of events.slice(200)) {
+      if (evicted.imageFile) {
+        fs.unlink(path.join(IMAGES_DIR, evicted.imageFile), () => {});
+      }
+    }
+    fs.writeFileSync(EVENTS_FILE, JSON.stringify(kept, null, 1));
     res.writeHead(200).end("ok");
 
   } else if (req.method === "GET" && p === "/api/events") {
