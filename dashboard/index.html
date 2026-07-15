@@ -72,6 +72,11 @@
       <span class="badge" id="badge"><span class="dot"></span><span id="badgeText">CONNECTING</span></span>
       <img id="stream" alt="Porch camera">
     </div>
+    <div class="controls">
+      <button class="primary" data-cmd="open" data-msg="Opening box (13s)">Open box</button>
+      <button data-cmd="pulse" data-msg="Pulsed">Pulse</button>
+      <button data-cmd="box_emptied" data-msg="Marked emptied">Box emptied</button>
+    </div>
   </section>
 
   <section class="activity">
@@ -113,6 +118,8 @@ function saveKey() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("button[data-cmd]").forEach((b) =>
+    b.addEventListener("click", () => command(b.dataset.cmd, b.dataset.msg)));
   document.getElementById("savekey").addEventListener("click", saveKey);
 });
 
@@ -126,6 +133,14 @@ function toast(msg) {
 async function api(path, opts = {}) {
   opts.headers = Object.assign({ "X-Lockbox-Token": KEY }, opts.headers || {});
   return fetch(path, opts);
+}
+
+async function command(cmd, okMsg) {
+  try {
+    const r = await api("/api/command", { method: "POST", body: JSON.stringify({ cmd }) });
+    const j = await r.json();
+    toast(j.ok ? (j.via === "phone" ? okMsg + " (via camera)" : okMsg) : "Failed");
+  } catch { toast("Unreachable"); }
 }
 
 let lastFrameAt = 0;

@@ -78,25 +78,21 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         detailLabel.font = .systemFont(ofSize: 12)
         detailLabel.numberOfLines = 1
 
-        let emptiedButton = UIButton(type: .system)
-        emptiedButton.setTitle("Box emptied", for: .normal)
-        emptiedButton.addTarget(self, action: #selector(boxEmptiedTapped), for: .touchUpInside)
-        let unlockButton = UIButton(type: .system)
-        unlockButton.setTitle("Unlock now", for: .normal)
-        unlockButton.addTarget(self, action: #selector(unlockNowTapped), for: .touchUpInside)
-
+        // No lock controls on THIS screen: the camera phone sits at the window
+        // where anyone could tap it. Unlock/box-emptied live on the (token-
+        // protected) dashboard, relayed through this phone's command polling.
         let activityButton = UIButton(type: .system)
         activityButton.setTitle("Activity", for: .normal)
         activityButton.addTarget(self, action: #selector(activityTapped), for: .touchUpInside)
 
-        let buttons = UIStackView(arrangedSubviews: [emptiedButton, unlockButton, activityButton])
+        let buttons = UIStackView(arrangedSubviews: [activityButton])
         buttons.axis = .horizontal
         buttons.distribution = .fillEqually
         buttons.spacing = 8
         buttons.backgroundColor = UIColor.black.withAlphaComponent(0.65)
         buttons.layer.cornerRadius = 10
         buttons.translatesAutoresizingMaskIntoConstraints = false
-        [emptiedButton, unlockButton, activityButton].forEach { $0.setTitleColor(.white, for: .normal) }
+        activityButton.setTitleColor(.white, for: .normal)
 
         view.addSubview(banner)
         view.addSubview(buttons)
@@ -116,8 +112,6 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         }
     }
 
-    @objc private func boxEmptiedTapped() { lockbox.boxEmptied() }
-    @objc private func unlockNowTapped() { lockbox.manualUnlock() }
     @objc private func activityTapped() {
         let nav = UINavigationController(rootViewController: ActivityViewController(style: .insetGrouped))
         present(nav, animated: true)
