@@ -57,9 +57,13 @@ function readBody(req) {
 
 function broadcastFrame(jpeg) {
   for (const res of streamClients) {
-    res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`);
-    res.write(jpeg);
-    res.write("\r\n");
+    try {
+      res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`);
+      res.write(jpeg);
+      res.write("\r\n");
+    } catch {
+      streamClients.delete(res);
+    }
   }
 }
 
@@ -104,6 +108,7 @@ const server = http.createServer(async (req, res) => {
       Connection: "close",
     });
     streamClients.add(res);
+    res.on("error", () => streamClients.delete(res));
     if (latestSnapshot) broadcastFrame(latestSnapshot);
     req.on("close", () => streamClients.delete(res));
 
