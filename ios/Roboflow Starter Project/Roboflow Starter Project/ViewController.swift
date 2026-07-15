@@ -197,13 +197,7 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         // people, and the cloud zone polygon assumes upright frames. Without
         // this, buffers arrive in sideways sensor orientation and person
         // detection craters.
-        if #available(iOS 17.0, *) {
-            if captureConnection?.isVideoRotationAngleSupported(90) == true {
-                captureConnection?.videoRotationAngle = 90
-            }
-        } else {
-            captureConnection?.videoOrientation = .portrait
-        }
+        applyPortraitOrientation()
         do {
             try  videoDevice.lockForConfiguration()
             let dimensions = CMVideoFormatDescriptionGetDimensions((videoDevice.activeFormat.formatDescription))
@@ -256,7 +250,22 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         guard let newVideoInput = try? AVCaptureDeviceInput(device: newCameraDevice) else { return  }
         captureSession.addInput(newVideoInput)
         captureSession.commitConfiguration()
+        // Switching cameras creates a NEW video connection with default
+        // (sideways) rotation - the portrait setting must be re-applied
+        // every time, or the model and the dashboard get rotated frames.
+        applyPortraitOrientation()
         updateLayerGeometry()   // re-evaluate mirroring for the new camera
+    }
+
+    private func applyPortraitOrientation() {
+        guard let connection = videoDataOutput.connection(with: .video) else { return }
+        if #available(iOS 17.0, *) {
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+            }
+        } else {
+            connection.videoOrientation = .portrait
+        }
     }
     
     func getCamera(with position: AVCaptureDevice.Position) -> AVCaptureDevice? {
