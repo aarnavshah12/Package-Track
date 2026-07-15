@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porch Lockbox</title>
+<style>
+  :root {
+    --bg: #12161b; --panel: #1a2129; --line: #2a333e;
+    --ink: #e9edf1; --muted: #97a3ae; --accent: #f0c64a;
+    --good: #6cc48f; --bad: #e8834a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 small { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); margin: 28px 0 10px; }
+  .live { position: relative; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; }
+  .live img { display: block; width: 100%; min-height: 200px; object-fit: contain; background: #000; }
+  .live .tag { position: absolute; top: 10px; left: 10px; padding: 3px 10px;
+    border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,.6); }
+  .tag.on { color: var(--good); } .tag.off { color: var(--muted); }
+  .statusbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 14px; font-size: 14px; }
+  .chip b { color: var(--accent); }
+  .buttons { display: flex; gap: 10px; margin-top: 14px; }
+  button { flex: 1; padding: 14px; font-size: 15px; font-weight: 700; border: 0;
+    border-radius: 10px; cursor: pointer; color: #14181d; background: var(--accent); }
+  button.secondary { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  button:active { transform: scale(.98); }
+  .feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #000; }
+  .card .meta { padding: 8px 10px; font-size: 13px; }
+  .card .meta .when { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #14181d; font-weight: 700; padding: 10px 18px;
+    border-radius: 999px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>📦 Porch Lockbox <small id="lockstate">checking lock…</small></h1>
+
+  <div class="live">
+    <span class="tag off" id="liveTag">LIVE VIEW</span>
+    <img id="liveImg" alt="Porch camera view" src="">
+  </div>
+
+  <div class="statusbar" id="statusbar"></div>
+
+  <div class="buttons">
+    <button onclick="lock('open', 'Box opened for 13s')">Open box (13s)</button>
+    <button class="secondary" onclick="lock('pulse', 'Pulsed')">Pulse (1s)</button>
+  </div>
+
+  <h2>Activity</h2>
+  <div class="feed" id="feed"><div class="empty">No activity yet — delivery moments appear here with photos.</div></div>
+
+  <div class="toast" id="toast"></div>
+</main>
+<script>
+const FRIENDLY = {
+  delivery_confirmed: "📦 Package delivered",
+  delivery_failed_package_on_ground: "⚠️ Package left outside",
+  box_opened: "🔓 Box opened for delivery",
+};
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function lock(cmd, okMsg) {
+  try {
+    const r = await fetch(`/api/${cmd}`);
+    const j = await r.json();
+    toast(j.ok ? okMsg : `Lock unreachable: ${j.error || "error"}`);
+  } catch (e) { toast("Lock unreachable"); }
+}
+
+async function pollSnapshot() {
+  try {
+    const r = await fetch(`/api/snapshot?t=${Date.now()}`);
+    const tag = document.getElementById("liveTag");
+    if (r.ok) {
+      const age = Number(r.headers.get("X-Snapshot-Age-Ms") || 0);
+      const blob = await r.blob();
+      document.getElementById("liveImg").src = URL.createObjectURL(blob);
+      const fresh = age < 15000;
+      tag.textContent = fresh ? "● LIVE" : `LAST SEEN ${Math.round(age / 60000)}m AGO`;
+      tag.className = "tag " + (fresh ? "on" : "off");
+    } else {
+      tag.textContent = "WAITING FOR CAMERA";
+      tag.className = "tag off";
+    }
+  } catch {}
+}
+
+async function pollLock() {
+  try {
+    const r = await fetch("/api/lockstatus");
+    const j = await r.json();
+    if (j.ok) {
+      const s = JSON.parse(j.lock);
+      document.getElementById("lockstate").textContent =
+        s.unlocked ? `UNLOCKED — closes in ${Math.ceil(s.auto_relock_ms / 1000)}s` : "locked";
+    } else {
+      document.getElementById("lockstate").textContent = "lock offline";
+    }
+  } catch {}
+}
+
+async function pollEvents() {
+  try {
+    const r = await fetch("/api/events");
+    const events = await r.json();
+    if (!events.length) return;
+    const feed = document.getElementById("feed");
+    feed.innerHTML = events.map(e => `
+      <div class="card">
+        ${e.imageFile ? `<img loading="lazy" src="/event-images/${e.imageFile}">` : ""}
+        <div class="meta">
+          <div>${FRIENDLY[e.event] || e.event}</div>
+          <div class="when">${new Date(e.at).toLocaleString()}</div>
+        </div>
+      </div>`).join("");
+  } catch {}
+}
+
+setInterval(pollSnapshot, 1500);
+setInterval(pollLock, 3000);
+setInterval(pollEvents, 5000);
+pollSnapshot(); pollLock(); pollEvents();
+</script>
+</body>
+</html>

@@ -28,6 +28,7 @@
 		FB0000000000000000000007 /* LockboxSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000007 /* LockboxSecrets.swift */; };
 		FB0000000000000000000008 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000008 /* EventStore.swift */; };
 		FB0000000000000000000009 /* ActivityViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0000000000000000000009 /* ActivityViewController.swift */; };
+		FB000000000000000000000A /* DashboardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC000000000000000000000A /* DashboardClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +73,7 @@
 		FC0000000000000000000007 /* LockboxSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockboxSecrets.swift; sourceTree = "<group>"; };
 		FC0000000000000000000008 /* EventStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStore.swift; sourceTree = "<group>"; };
 		FC0000000000000000000009 /* ActivityViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityViewController.swift; sourceTree = "<group>"; };
+		FC000000000000000000000A /* DashboardClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -135,6 +137,7 @@
 				FC0000000000000000000007 /* LockboxSecrets.swift */,
 				FC0000000000000000000008 /* EventStore.swift */,
 				FC0000000000000000000009 /* ActivityViewController.swift */,
+				FC000000000000000000000A /* DashboardClient.swift */,
 				E48B4CFE28CF745D00A9B237 /* DispatchTimeInterval+Extension.swift */,
 				E4699FCE28CE96A40099DD5A /* UIImage+Extension.swift */,
 				E4B079D928CE930C00A2237F /* Main.storyboard */,
@@ -309,6 +312,7 @@
 				FB0000000000000000000007 /* LockboxSecrets.swift in Sources */,
 				FB0000000000000000000008 /* EventStore.swift in Sources */,
 				FB0000000000000000000009 /* ActivityViewController.swift in Sources */,
+				FB000000000000000000000A /* DashboardClient.swift in Sources */,
 				E4B079D428CE930C00A2237F /* AppDelegate.swift in Sources */,
 				E4B079D628CE930C00A2237F /* SceneDelegate.swift in Sources */,
 				E48B4CFF28CF745D00A9B237 /* DispatchTimeInterval+Extension.swift in Sources */,

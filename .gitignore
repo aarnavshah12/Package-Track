@@ -23,3 +23,7 @@ ios/**/LockboxSecrets.swift
 *.xcuserdatad/
 xcuserdata/
 DerivedData/
+
+# dashboard runtime data
+dashboard/events.json
+dashboard/event-images/

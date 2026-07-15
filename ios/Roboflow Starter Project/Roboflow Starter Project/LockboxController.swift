@@ -118,6 +118,7 @@ final class LockboxController {
                         self.brain.confirmUnlock(now: self.now)
                         print("[lockbox] >>> BOX OPEN")
                         EventStore.shared.record(event: "box_opened", image: image)
+                        DashboardClient.shared.postEvent("box_opened", jpeg: image.jpegData(compressionQuality: 0.85))
                     } else {
                         print("[lockbox] ERROR: lock unreachable - will retry")
                     }
@@ -128,6 +129,7 @@ final class LockboxController {
                 lastEvent = event
                 print("[lockbox] *** EVENT \(event)")
                 EventStore.shared.record(event: event, image: image)
+                DashboardClient.shared.postEvent(event, jpeg: image.jpegData(compressionQuality: 0.85))
                 persistPackageInBox()
                 // Re-send the deciding frame tagged with the event: fires the
                 // vision event + dataset upload server-side, exactly once.

@@ -35,6 +35,9 @@ final class WorkflowClient {
             completion(.failure(LockboxError.encodeFailed))
             return
         }
+        if clientEvent == "none" {
+            DashboardClient.shared.postSnapshot(jpeg)   // live view mirror (best-effort)
+        }
         let width = Int(prepared.size.width * prepared.scale)
         let height = Int(prepared.size.height * prepared.scale)
         let isEvent = clientEvent != "none"
