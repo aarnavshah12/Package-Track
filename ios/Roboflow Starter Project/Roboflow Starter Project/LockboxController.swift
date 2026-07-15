@@ -28,6 +28,13 @@ final class LockboxController {
     /// (headline, detail) - the ViewController renders these.
     var onStatusChanged: ((String, String) -> Void)?
 
+    // Dashboard live-view mirroring: ~8 fps while someone is watching,
+    // a trickle heartbeat otherwise. Commands queued on the dashboard are
+    // executed here - this phone is the household's hand on the LAN.
+    private var viewersWatching = false
+    private var nextMirrorAt: TimeInterval = 0
+    private var nextCtlAt: TimeInterval = 0
+
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     init() {
@@ -68,12 +75,50 @@ final class LockboxController {
                     deliveryInProgress: brain.state != .armed,
                     now: now)
 
+        mirrorTick(imageProvider: imageProvider)
+        controlTick()
+
         if gate.streaming && !pendingCloudCall && now >= nextSampleAt, let image = imageProvider() {
             nextSampleAt = now + 1.0 / LockboxConfig.streamFPS
             sample(image: image)
         }
 
         publishStatus()
+    }
+
+    // ------------------------------------------------------------------
+    // Dashboard mirroring + remote commands
+    // ------------------------------------------------------------------
+    private func mirrorTick(imageProvider: () -> UIImage?) {
+        let fps = viewersWatching ? 8.0 : 0.05   // 8 fps watched, 1 frame / 20 s idle
+        guard now >= nextMirrorAt, let image = imageProvider() else { return }
+        nextMirrorAt = now + 1.0 / fps
+        DispatchQueue.global(qos: .utility).async {
+            let small = image.resizedToMaxDimension(640)
+            if let jpeg = small.jpegData(compressionQuality: 0.5) {
+                DashboardClient.shared.postSnapshot(jpeg)
+            }
+        }
+    }
+
+    private func controlTick() {
+        guard now >= nextCtlAt else { return }
+        nextCtlAt = now + 3
+        DashboardClient.shared.fetchStreamCtl { [weak self] ctl in
+            guard let self = self, let ctl = ctl else { return }
+            self.viewersWatching = ctl.viewers > 0
+            for cmd in ctl.commands { self.executeRemote(cmd) }
+        }
+    }
+
+    private func executeRemote(_ cmd: String) {
+        print("[lockbox] remote command from dashboard: \(cmd)")
+        switch cmd {
+        case "open": lock.openForDelivery { _ in }
+        case "pulse": lock.manualPulse()
+        case "box_emptied": boxEmptied()
+        default: break
+        }
     }
 
     // ------------------------------------------------------------------

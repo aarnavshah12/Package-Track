@@ -3,75 +3,115 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Porch Lockbox</title>
+<title>Lockbox</title>
 <style>
   :root {
-    --bg: #12161b; --panel: #1a2129; --line: #2a333e;
-    --ink: #e9edf1; --muted: #97a3ae; --accent: #f0c64a;
-    --good: #6cc48f; --bad: #e8834a;
+    --bg: #f4f4f2; --panel: #ffffff; --line: #e2e1dd;
+    --ink: #1c1e21; --muted: #74787e; --live: #d64545;
+    --btn: #1c1e21; --btn-ink: #ffffff;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.5 "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; }
-  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h1 small { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .1em;
-    color: var(--muted); margin: 28px 0 10px; }
-  .live { position: relative; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 12px; overflow: hidden; }
-  .live img { display: block; width: 100%; min-height: 200px; object-fit: contain; background: #000; }
-  .live .tag { position: absolute; top: 10px; left: 10px; padding: 3px 10px;
-    border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,.6); }
-  .tag.on { color: var(--good); } .tag.off { color: var(--muted); }
-  .statusbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 8px 14px; font-size: 14px; }
-  .chip b { color: var(--accent); }
-  .buttons { display: flex; gap: 10px; margin-top: 14px; }
-  button { flex: 1; padding: 14px; font-size: 15px; font-weight: 700; border: 0;
-    border-radius: 10px; cursor: pointer; color: #14181d; background: var(--accent); }
-  button.secondary { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
-  button:active { transform: scale(.98); }
-  .feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #000; }
-  .card .meta { padding: 8px 10px; font-size: 13px; }
-  .card .meta .when { color: var(--muted); font-size: 12px; }
-  .empty { color: var(--muted); padding: 24px; text-align: center; }
-  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-    background: var(--accent); color: #14181d; font-weight: 700; padding: 10px 18px;
-    border-radius: 999px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: baseline; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+  header .lock { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  header .lock.unlocked { color: var(--live); font-weight: 600; }
+  main { max-width: 1040px; margin: 0 auto; padding: 20px 16px 60px;
+    display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 20px; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+
+  .cam { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; align-self: start; }
+  .cam .frame { position: relative; background: #0d0e10; }
+  .cam img { display: block; width: 100%; max-height: 480px; object-fit: contain; }
+  .badge { position: absolute; top: 10px; left: 10px; display: flex; align-items: center;
+    gap: 6px; background: rgba(13,14,16,.72); color: #fff; font-size: 11.5px;
+    font-weight: 600; letter-spacing: .04em; padding: 4px 10px; border-radius: 999px; }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #5b5f66; }
+  .badge.on .dot { background: var(--live); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .4; } }
+  .cam .controls { display: flex; gap: 8px; padding: 10px; }
+  button { flex: 1; padding: 10px 12px; font-size: 13.5px; font-weight: 600;
+    border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+    background: var(--panel); color: var(--ink); }
+  button.primary { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+  button:active { opacity: .8; }
+
+  .activity h2 { font-size: 12px; font-weight: 650; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--muted); margin: 4px 0 12px; }
+  .entry { display: flex; gap: 12px; align-items: center; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+    margin-bottom: 8px; }
+  .entry img { width: 92px; height: 66px; object-fit: cover; border-radius: 6px;
+    background: #0d0e10; flex: none; }
+  .entry .what { font-weight: 600; font-size: 14px; }
+  .entry .when { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+  .none { color: var(--muted); font-size: 14px; padding: 18px 4px; }
+  .keyask { max-width: 380px; margin: 80px auto; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; padding: 24px; text-align: center; }
+  .keyask input { width: 100%; padding: 10px; margin: 12px 0; border: 1px solid var(--line);
+    border-radius: 8px; font-size: 15px; text-align: center; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; font-size: 13.5px; font-weight: 600;
+    padding: 9px 16px; border-radius: 999px; opacity: 0; transition: opacity .2s;
+    pointer-events: none; }
   .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
-<main>
-  <h1>📦 Porch Lockbox <small id="lockstate">checking lock…</small></h1>
+<header>
+  <h1>Porch Lockbox</h1>
+  <span class="lock" id="lockstate"></span>
+</header>
 
-  <div class="live">
-    <span class="tag off" id="liveTag">LIVE VIEW</span>
-    <img id="liveImg" alt="Porch camera view" src="">
-  </div>
+<main id="app" hidden>
+  <section class="cam">
+    <div class="frame">
+      <span class="badge" id="badge"><span class="dot"></span><span id="badgeText">CONNECTING</span></span>
+      <img id="stream" alt="Porch camera">
+    </div>
+    <div class="controls">
+      <button class="primary" onclick="command('open', 'Opening box (13s)')">Open box</button>
+      <button onclick="command('pulse', 'Pulsed')">Pulse</button>
+      <button onclick="command('box_emptied', 'Marked emptied')">Box emptied</button>
+    </div>
+  </section>
 
-  <div class="statusbar" id="statusbar"></div>
-
-  <div class="buttons">
-    <button onclick="lock('open', 'Box opened for 13s')">Open box (13s)</button>
-    <button class="secondary" onclick="lock('pulse', 'Pulsed')">Pulse (1s)</button>
-  </div>
-
-  <h2>Activity</h2>
-  <div class="feed" id="feed"><div class="empty">No activity yet — delivery moments appear here with photos.</div></div>
-
-  <div class="toast" id="toast"></div>
+  <section class="activity">
+    <h2>Activity</h2>
+    <div id="feed"><div class="none">Nothing yet — delivery moments appear here.</div></div>
+  </section>
 </main>
+
+<div class="keyask" id="keyask" hidden>
+  <strong>Access key</strong>
+  <p style="color:var(--muted);font-size:13.5px">Enter the dashboard key (ask Aarnav).</p>
+  <input id="keyinput" placeholder="key" autocomplete="off">
+  <button class="primary" style="width:100%" onclick="saveKey()">Open dashboard</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
 const FRIENDLY = {
-  delivery_confirmed: "📦 Package delivered",
-  delivery_failed_package_on_ground: "⚠️ Package left outside",
-  box_opened: "🔓 Box opened for delivery",
+  delivery_confirmed: "Package delivered",
+  delivery_failed_package_on_ground: "Package left outside",
+  box_opened: "Box opened for delivery",
 };
+
+let KEY = new URLSearchParams(location.search).get("key") || localStorage.getItem("lockbox_key") || "";
+if (new URLSearchParams(location.search).get("key")) {
+  localStorage.setItem("lockbox_key", KEY);
+  history.replaceState(null, "", location.pathname);
+}
+
+function saveKey() {
+  KEY = document.getElementById("keyinput").value.trim();
+  localStorage.setItem("lockbox_key", KEY);
+  boot();
+}
 
 function toast(msg) {
   const t = document.getElementById("toast");
@@ -80,67 +120,79 @@ function toast(msg) {
   setTimeout(() => t.classList.remove("show"), 2200);
 }
 
-async function lock(cmd, okMsg) {
-  try {
-    const r = await fetch(`/api/${cmd}`);
-    const j = await r.json();
-    toast(j.ok ? okMsg : `Lock unreachable: ${j.error || "error"}`);
-  } catch (e) { toast("Lock unreachable"); }
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({ "X-Lockbox-Token": KEY }, opts.headers || {});
+  return fetch(path, opts);
 }
 
-async function pollSnapshot() {
+async function command(cmd, okMsg) {
   try {
-    const r = await fetch(`/api/snapshot?t=${Date.now()}`);
-    const tag = document.getElementById("liveTag");
-    if (r.ok) {
-      const age = Number(r.headers.get("X-Snapshot-Age-Ms") || 0);
-      const blob = await r.blob();
-      document.getElementById("liveImg").src = URL.createObjectURL(blob);
-      const fresh = age < 15000;
-      tag.textContent = fresh ? "● LIVE" : `LAST SEEN ${Math.round(age / 60000)}m AGO`;
-      tag.className = "tag " + (fresh ? "on" : "off");
-    } else {
-      tag.textContent = "WAITING FOR CAMERA";
-      tag.className = "tag off";
-    }
-  } catch {}
+    const r = await api("/api/command", { method: "POST", body: JSON.stringify({ cmd }) });
+    const j = await r.json();
+    toast(j.ok ? (j.via === "phone" ? okMsg + " (via camera)" : okMsg) : "Failed");
+  } catch { toast("Unreachable"); }
 }
+
+let lastFrameAt = 0;
+function startStream() {
+  const img = document.getElementById("stream");
+  img.src = `/api/stream?key=${encodeURIComponent(KEY)}&t=${Date.now()}`;
+  img.onload = () => { lastFrameAt = Date.now(); };
+  img.onerror = () => setTimeout(startStream, 4000);
+}
+setInterval(() => {
+  const badge = document.getElementById("badge");
+  const text = document.getElementById("badgeText");
+  const fresh = Date.now() - lastFrameAt < 6000;
+  badge.className = "badge" + (fresh ? " on" : "");
+  text.textContent = fresh ? "LIVE" : (lastFrameAt ? "CAMERA IDLE" : "WAITING FOR CAMERA");
+}, 1000);
 
 async function pollLock() {
   try {
-    const r = await fetch("/api/lockstatus");
+    const r = await api("/api/lockstatus");
     const j = await r.json();
+    const el = document.getElementById("lockstate");
     if (j.ok) {
       const s = JSON.parse(j.lock);
-      document.getElementById("lockstate").textContent =
-        s.unlocked ? `UNLOCKED — closes in ${Math.ceil(s.auto_relock_ms / 1000)}s` : "locked";
-    } else {
-      document.getElementById("lockstate").textContent = "lock offline";
-    }
+      el.textContent = s.unlocked ? `unlocked — closes in ${Math.ceil(s.auto_relock_ms / 1000)}s` : "locked";
+      el.className = "lock" + (s.unlocked ? " unlocked" : "");
+    } else { el.textContent = ""; }
   } catch {}
 }
 
 async function pollEvents() {
   try {
-    const r = await fetch("/api/events");
+    const r = await api("/api/events");
+    if (r.status === 401) { document.getElementById("app").hidden = true;
+      document.getElementById("keyask").hidden = false; return; }
     const events = await r.json();
     if (!events.length) return;
-    const feed = document.getElementById("feed");
-    feed.innerHTML = events.map(e => `
-      <div class="card">
-        ${e.imageFile ? `<img loading="lazy" src="/event-images/${e.imageFile}">` : ""}
-        <div class="meta">
-          <div>${FRIENDLY[e.event] || e.event}</div>
-          <div class="when">${new Date(e.at).toLocaleString()}</div>
+    document.getElementById("feed").innerHTML = events.slice(0, 50).map(e => `
+      <div class="entry">
+        ${e.imageFile ? `<img loading="lazy" src="/event-images/${e.imageFile}?key=${encodeURIComponent(KEY)}">` : ""}
+        <div>
+          <div class="what">${FRIENDLY[e.event] || e.event}</div>
+          <div class="when">${new Date(e.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>
         </div>
       </div>`).join("");
   } catch {}
 }
 
-setInterval(pollSnapshot, 1500);
-setInterval(pollLock, 3000);
-setInterval(pollEvents, 5000);
-pollSnapshot(); pollLock(); pollEvents();
+async function boot() {
+  const probe = await api("/api/events");
+  if (probe.status === 401) {
+    document.getElementById("keyask").hidden = false;
+    document.getElementById("app").hidden = true;
+    return;
+  }
+  document.getElementById("keyask").hidden = true;
+  document.getElementById("app").hidden = false;
+  startStream(); pollLock(); pollEvents();
+  setInterval(pollLock, 4000);
+  setInterval(pollEvents, 6000);
+}
+boot();
 </script>
 </body>
 </html>
