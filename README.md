@@ -211,13 +211,45 @@ sent` — the wake-word cost-efficiency metric for the Phase D writeup.
    demo) — that's why `GATE_MODE="motion"` is the default. The iPhone (Phase C)
    replaces this with a real on-device person model.
 
-## Phase C/D preview
+## Phase C — the iPhone app (`ios/`) ✅
 
-- **C (iOS):** fork `roboflow-ios-starter` (CocoaPods `pod 'Roboflow'`); on-device
-  person model via `rf.load(model:modelVersion:)` becomes the wake gate (person ≥2
-  frames → stream at 1 fps; absent 30 s → stop); port `LockboxStateMachine` 1:1 to
-  a Swift struct (it's deliberately a pure function of facts + clock); URLSession
-  POST of the same JSON payload; `package_in_box` in UserDefaults.
-- **D:** tune zone/thresholds on real porch frames; retrain on the
-  `lockbox-event`-tagged uploads; metrics = session gate stats + model evals
-  before/after porch fine-tuning.
+The window camera is an iPhone running the app in `ios/Roboflow Starter Project/`
+(SPM, Roboflow Swift SDK ≥1.2.7, RF-DETR on-device at 24-30 FPS):
+
+- **Tiered wake gate** (on-device, costs nothing): a car/truck *arriving*, a
+  person+package together, or a person present 2+ frames → start streaming
+  1 fps to the cloud workflow; 30 quiet seconds → sleep. Tiers only control
+  *watching* — unlocking still requires cloud-confirmed person+package in the
+  zone, the dwell count, and the pre-open countdown.
+- **The same state machine** as the Python client, ported 1:1 and hardened by
+  an adversarial review (retry parity, kiosk keep-awake, suspension-safe timers).
+- **Activity tab** with photos of every delivery moment (also mirrored to the
+  dashboard and to Roboflow Vision Events).
+- Setup: copy `LockboxSecrets.example.swift.txt` → `LockboxSecrets.swift`, fill
+  in, build onto a physical iPhone (camera required).
+
+## Notifications (`ntfy`) ✅
+
+The workflow itself pushes on every delivery verdict (webhook → ntfy.sh).
+Subscribe from any phone: install the ntfy app → Subscribe → your `NTFY_TOPIC`
+value. Both outcomes push: *delivered* ✅ and *left outside* ⚠️. The topic name
+is effectively a password — don't publish it.
+
+## Household dashboard (`dashboard/`) ✅
+
+Zero-dependency Node server + single-page UI: real MJPEG live stream
+(viewer-aware — the phone mirrors ~8 fps while watched, a trickle otherwise),
+event gallery, and lock buttons. Token-protected (`DASH_TOKEN`).
+
+- **Home mode:** run on a Mac on the LAN (`node dashboard/server.js`, port
+  8321) — buttons hit the ESP32 directly.
+- **Cloud mode:** deploy with `render.yaml` (one env var: `DASH_TOKEN`) —
+  watchable from anywhere; buttons queue as commands that the camera phone
+  (always home, always awake) executes on the LAN. The cloud never reaches
+  the lock directly, by design.
+
+## Phase D — next
+
+Tune zone/thresholds on real porch frames; retrain on the
+`lockbox-event`-tagged uploads; metrics = the app's frames-saved stats + model
+evals before/after porch fine-tuning.
