@@ -27,3 +27,4 @@ DerivedData/
 # dashboard runtime data
 dashboard/events.json
 dashboard/event-images/
+dashboard/*.log

@@ -1,6 +1,0 @@
-Porch Lockbox dashboard: http://localhost:8321
-On your phones (same Wi-Fi): http://<this-mac's-ip>:8321
-ESP32: 192.168.5.243
-Porch Lockbox dashboard on :8321
-auth: token required
-ESP32 direct path: 192.168.5.243
