@@ -73,9 +73,9 @@
       <img id="stream" alt="Porch camera">
     </div>
     <div class="controls">
-      <button class="primary" onclick="command('open', 'Opening box (13s)')">Open box</button>
-      <button onclick="command('pulse', 'Pulsed')">Pulse</button>
-      <button onclick="command('box_emptied', 'Marked emptied')">Box emptied</button>
+      <button class="primary" data-cmd="open" data-msg="Opening box (13s)">Open box</button>
+      <button data-cmd="pulse" data-msg="Pulsed">Pulse</button>
+      <button data-cmd="box_emptied" data-msg="Marked emptied">Box emptied</button>
     </div>
   </section>
 
@@ -89,7 +89,7 @@
   <strong>Access key</strong>
   <p style="color:var(--muted);font-size:13.5px">Enter the dashboard key (ask Aarnav).</p>
   <input id="keyinput" placeholder="key" autocomplete="off">
-  <button class="primary" style="width:100%" onclick="saveKey()">Open dashboard</button>
+  <button class="primary" style="width:100%" id="savekey">Open dashboard</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -101,17 +101,27 @@ const FRIENDLY = {
   box_opened: "Box opened for delivery",
 };
 
-let KEY = new URLSearchParams(location.search).get("key") || localStorage.getItem("lockbox_key") || "";
+const store = {
+  get() { try { return localStorage.getItem("lockbox_key") || ""; } catch { return ""; } },
+  set(v) { try { localStorage.setItem("lockbox_key", v); } catch {} },
+};
+let KEY = new URLSearchParams(location.search).get("key") || store.get();
 if (new URLSearchParams(location.search).get("key")) {
-  localStorage.setItem("lockbox_key", KEY);
+  store.set(KEY);
   history.replaceState(null, "", location.pathname);
 }
 
 function saveKey() {
   KEY = document.getElementById("keyinput").value.trim();
-  localStorage.setItem("lockbox_key", KEY);
+  store.set(KEY);
   boot();
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("button[data-cmd]").forEach((b) =>
+    b.addEventListener("click", () => command(b.dataset.cmd, b.dataset.msg)));
+  document.getElementById("savekey").addEventListener("click", saveKey);
+});
 
 function toast(msg) {
   const t = document.getElementById("toast");
