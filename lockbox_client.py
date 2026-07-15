@@ -126,6 +126,7 @@ class WorkflowClient:
                 "client_event": client_event,
                 "disable_upload": not is_event,
                 "notify_email": cfg.NOTIFY_EMAIL,
+                "ntfy_topic": os.environ.get("NTFY_TOPIC", ""),
             },
         }
         if not include_image:
