@@ -5,64 +5,93 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lockbox</title>
 <style>
+  /* Nocturne tokens (inlined so the page stays zero-dependency) */
   :root {
-    --bg: #f4f4f2; --panel: #ffffff; --line: #e2e1dd;
-    --ink: #1c1e21; --muted: #74787e; --live: #d64545;
-    --btn: #1c1e21; --btn-ink: #ffffff;
+    --bg: #161826; --surface: #232532; --text: #e9e9ed;
+    --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --accent: #9184d9; --a200: #e7e5fe; --a300: #d2cefd; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --radius-sm: 4px; --radius-md: 8px; --radius-lg: 14px;
+    --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,.55);
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: baseline; justify-content: space-between;
-    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  header h1 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
-  header .lock { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  header .lock.unlocked { color: var(--live); font-weight: 600; }
-  main { max-width: 1040px; margin: 0 auto; padding: 20px 16px 60px;
-    display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 20px; }
-  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 "Inter", system-ui, -apple-system, sans-serif; }
+  ::selection { background: var(--a800); color: var(--a200); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .cam { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    overflow: hidden; align-self: start; }
-  .cam .frame { position: relative; background: #0d0e10; }
-  .cam img { display: block; width: 100%; max-height: 480px; object-fit: contain; }
-  .badge { position: absolute; top: 10px; left: 10px; display: flex; align-items: center;
-    gap: 6px; background: rgba(13,14,16,.72); color: #fff; font-size: 11.5px;
-    font-weight: 600; letter-spacing: .04em; padding: 4px 10px; border-radius: 999px; }
-  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #5b5f66; }
-  .badge.on .dot { background: var(--live); animation: pulse 1.6s infinite; }
-  @keyframes pulse { 50% { opacity: .4; } }
-  .cam .controls { display: flex; gap: 8px; padding: 10px; }
-  button { flex: 1; padding: 10px 12px; font-size: 13.5px; font-weight: 600;
-    border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
-    background: var(--panel); color: var(--ink); }
-  button.primary { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
-  button:active { opacity: .8; }
+  header { display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 26px; border-bottom: 1px solid var(--n800); }
+  header h1 { display: flex; align-items: center; gap: 10px; font-size: 15px;
+    font-weight: 500; margin: 0; letter-spacing: .01em; }
+  header h1 svg { color: var(--accent); }
+  header .lock { font-size: 13px; color: var(--n400); font-variant-numeric: tabular-nums; }
+  header .lock.unlocked { color: var(--a300); }
 
-  .activity h2 { font-size: 12px; font-weight: 650; text-transform: uppercase;
-    letter-spacing: .09em; color: var(--muted); margin: 4px 0 12px; }
-  .entry { display: flex; gap: 12px; align-items: center; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 10px; padding: 8px;
-    margin-bottom: 8px; }
-  .entry img { width: 92px; height: 66px; object-fit: cover; border-radius: 6px;
-    background: #0d0e10; flex: none; }
-  .entry .what { font-weight: 600; font-size: 14px; }
-  .entry .when { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
-  .none { color: var(--muted); font-size: 14px; padding: 18px 4px; }
-  .keyask { max-width: 380px; margin: 80px auto; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 12px; padding: 24px; text-align: center; }
-  .keyask input { width: 100%; padding: 10px; margin: 12px 0; border: 1px solid var(--line);
-    border-radius: 8px; font-size: 15px; text-align: center; }
-  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    background: var(--ink); color: #fff; font-size: 13.5px; font-weight: 600;
-    padding: 9px 16px; border-radius: 999px; opacity: 0; transition: opacity .2s;
-    pointer-events: none; }
+  main { max-width: 1120px; margin: 0 auto; padding: 26px 26px 64px;
+    display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 34px; align-items: start; }
+  @media (max-width: 780px) { main { grid-template-columns: 1fr; } }
+
+  .cam { display: flex; flex-direction: column; gap: 11px; }
+  .cam .frame { position: relative; background: var(--n900); border: 1px solid var(--n800);
+    border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-md); }
+  .cam img { display: block; width: 100%; max-height: 560px; object-fit: contain;
+    mix-blend-mode: lighten; opacity: .94; }
+  .frame::after { content: ""; position: absolute; inset: auto 0 0 0; height: 64px;
+    background: linear-gradient(to top, rgba(13,14,22,.7), transparent); pointer-events: none; }
+  .badge { position: absolute; z-index: 1; top: 11px; left: 11px; display: flex; align-items: center;
+    gap: 7px; background: rgba(13,14,22,.72); border: 1px solid var(--n700);
+    color: var(--text); font-size: 11px; font-weight: 500; letter-spacing: .08em;
+    padding: 4px 11px; border-radius: 999px; backdrop-filter: blur(6px); }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--n600); }
+  .badge.on .dot { background: var(--accent); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .cam .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  button { padding: 9px 12px; font: 500 13px/1.2 inherit; font-family: inherit; cursor: pointer;
+    border: 1px solid var(--n700); border-radius: var(--radius-md);
+    background: transparent; color: var(--n300); transition: background .12s, border-color .12s; }
+  button:hover { background: var(--n900); border-color: var(--n600); }
+  button.primary { border-color: var(--accent); color: var(--a300); }
+  button.primary:hover { background: var(--a900); }
+  button:active { background: var(--a800); }
+  .hint { margin: 0; font-size: 12px; color: var(--n500); line-height: 1.5; }
+
+  .activity .head { display: flex; align-items: baseline; justify-content: space-between; margin: 2px 0 14px; }
+  .activity h2 { font-size: 12px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--n400); margin: 0; }
+  .activity .rule { height: 1px; background: linear-gradient(to right, var(--n700), transparent);
+    margin-bottom: 16px; }
+  .entry { display: flex; gap: 13px; align-items: center; background: var(--n900);
+    border: 1px solid var(--n800); border-radius: var(--radius-md); padding: 9px;
+    margin-bottom: 9px; transition: border-color .12s; }
+  .entry:hover { border-color: var(--n700); }
+  .entry img { width: 94px; height: 66px; object-fit: cover; border-radius: var(--radius-sm);
+    background: var(--n800); flex: none; mix-blend-mode: lighten; opacity: .92; }
+  .entry .what { font-weight: 500; font-size: 13.5px; }
+  .entry .when { color: var(--n500); font-size: 12px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .none { color: var(--n500); font-size: 13.5px; padding: 16px 2px; }
+
+  .keyask { max-width: 380px; margin: 90px auto; background: var(--surface);
+    border: 1px solid var(--n800); border-radius: var(--radius-lg); padding: 26px;
+    text-align: center; box-shadow: var(--shadow-md); }
+  .keyask strong { font-weight: 500; font-size: 15px; }
+  .keyask input { width: 100%; padding: 9px; margin: 12px 0; border: 1px solid var(--n700);
+    border-radius: var(--radius-md); font: inherit; font-size: 14px; text-align: center;
+    background: var(--bg); color: var(--text); }
+  .keyask input::placeholder { color: var(--n600); }
+
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--n800); border: 1px solid var(--a700); color: var(--text);
+    font-size: 13px; font-weight: 500; padding: 9px 17px; border-radius: 999px;
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+    box-shadow: 0 16px 40px rgba(0,0,0,.65); }
   .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Porch Lockbox</h1>
+  <h1><svg width="17" height="17" viewBox="0 0 256 256" fill="currentColor"><path d="M208,32H48A16,16,0,0,0,32,48V192a16,16,0,0,0,16,16H64v16a8,8,0,0,0,16,0V208H176v16a8,8,0,0,0,16,0V208h16a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,160H48V48H208V192ZM68,88a8,8,0,0,1,8-8H180a8,8,0,0,1,0,16H76A8,8,0,0,1,68,88Zm60,64a20,20,0,1,0-20-20A20,20,0,0,0,128,152Z"/></svg>Porch Lockbox</h1>
   <span class="lock" id="lockstate"></span>
 </header>
 
@@ -77,17 +106,19 @@
       <button data-cmd="pulse" data-msg="Pulsed">Pulse</button>
       <button data-cmd="box_emptied" data-msg="Marked emptied">Box emptied</button>
     </div>
+    <p class="hint">Open holds the bolt for 13&thinsp;s, then it re-locks on its own.</p>
   </section>
 
   <section class="activity">
-    <h2>Activity</h2>
+    <div class="head"><h2>Activity</h2></div>
+    <div class="rule"></div>
     <div id="feed"><div class="none">Nothing yet — delivery moments appear here.</div></div>
   </section>
 </main>
 
 <div class="keyask" id="keyask" hidden>
   <strong>Access key</strong>
-  <p style="color:var(--muted);font-size:13.5px">Enter the dashboard key (ask Aarnav).</p>
+  <p style="color:var(--n500);font-size:13px">Enter the dashboard key (ask Aarnav).</p>
   <input id="keyinput" placeholder="key" autocomplete="off">
   <button class="primary" style="width:100%" id="savekey">Open dashboard</button>
 </div>
@@ -165,7 +196,7 @@ async function pollLock() {
     const el = document.getElementById("lockstate");
     if (j.ok) {
       const s = JSON.parse(j.lock);
-      el.textContent = s.unlocked ? `unlocked — closes in ${Math.ceil(s.auto_relock_ms / 1000)}s` : "locked";
+      el.textContent = s.unlocked ? `Unlocked — closes in ${Math.ceil(s.auto_relock_ms / 1000)}s` : "Locked";
       el.className = "lock" + (s.unlocked ? " unlocked" : "");
     } else { el.textContent = ""; }
   } catch {}
