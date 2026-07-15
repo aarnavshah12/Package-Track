@@ -20,6 +20,7 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
     var rootLayer: CALayer! = nil
     
     private var detectionOverlay: CALayer! = nil
+    private var overlayMirrored = false   // front camera preview is mirrored; boxes must match
     var currentPixelBuffer: CVPixelBuffer!
     
     private let captureSession = AVCaptureSession()
@@ -261,6 +262,7 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         guard let newVideoInput = try? AVCaptureDeviceInput(device: newCameraDevice) else { return  }
         captureSession.addInput(newVideoInput)
         captureSession.commitConfiguration()
+        updateLayerGeometry()   // re-evaluate mirroring for the new camera
     }
     
     func getCamera(with position: AVCaptureDevice.Position) -> AVCaptureDevice? {
@@ -509,6 +511,10 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         textLayer.shadowOffset = CGSize(width: 2, height: 2)
         textLayer.foregroundColor = CGColor(colorSpace: CGColorSpaceCreateDeviceRGB(), components: [0.0, 0.0, 0.0, 1.0])
         textLayer.contentsScale = 2.0 // retina rendering
+        if overlayMirrored {
+            // counter-flip so label text stays readable inside the mirrored overlay
+            textLayer.setAffineTransform(CGAffineTransform(scaleX: -1, y: 1))
+        }
         
         // Rotate the layer into screen orientation and scale and mirror
 //        textLayer.setAffineTransform(CGAffineTransform(rotationAngle: CGFloat(.pi / 2.0)).scaledBy(x: -1.0, y: -1.0))
@@ -544,10 +550,16 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
         if scale.isInfinite {
             scale = 1.0
         }
+        // iOS mirrors the FRONT camera preview (selfie convention) but not the
+        // detection coordinates - flip the overlay to match, so boxes track
+        // your actual movement. The back camera needs no flip.
+        let isFront = (captureSession.inputs.first as? AVCaptureDeviceInput)?.device.position == .front
+        overlayMirrored = isFront
+
         CATransaction.begin()
         CATransaction.setValue(kCFBooleanTrue, forKey: kCATransactionDisableActions)
 
-        detectionOverlay.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
+        detectionOverlay.setAffineTransform(CGAffineTransform(scaleX: isFront ? -scale : scale, y: scale))
         // Center the layer
         detectionOverlay.position = CGPoint (x: bounds.midX, y: bounds.midY)
 

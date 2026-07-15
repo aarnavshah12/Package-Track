@@ -36,7 +36,6 @@ const ESP32 = process.env.ESP32_IP || envVar("ESP32_IP") || null;
 let latestSnapshot = null;
 let latestSnapshotAt = 0;
 const streamClients = new Set();   // open MJPEG responses
-const pendingCommands = [];        // [{id, cmd, at}] awaiting the camera phone
 
 function authorized(req, url) {
   if (!TOKEN) return true;
@@ -66,18 +65,6 @@ function broadcastFrame(jpeg) {
     }
   }
 }
-
-function tryESP32(pathname) {
-  return new Promise((resolve) => {
-    if (!ESP32) return resolve(false);
-    const req = http.get({ host: ESP32.split(":")[0], port: 80, path: pathname, timeout: 2500 },
-      (r) => { r.resume(); resolve(r.statusCode === 200); });
-    req.on("timeout", () => { req.destroy(); resolve(false); });
-    req.on("error", () => resolve(false));
-  });
-}
-
-const COMMAND_PATHS = { open: "/open", pulse: "/pulse" };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -152,30 +139,11 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "image/jpeg" }).end(data);
     });
 
-  } else if (req.method === "POST" && p === "/api/command") {
-    let cmd;
-    try { cmd = JSON.parse((await readBody(req)).toString("utf8")).cmd; }
-    catch { return res.writeHead(400).end("bad json"); }
-    if (!["open", "pulse", "box_emptied"].includes(cmd)) return res.writeHead(400).end("unknown cmd");
-    // Direct ESP32 path when this server is on the home LAN; otherwise the
-    // camera phone (always home) picks the command up within a few seconds.
-    if (COMMAND_PATHS[cmd] && (await tryESP32(COMMAND_PATHS[cmd]))) {
-      res.writeHead(200, { "Content-Type": "application/json" })
-        .end(JSON.stringify({ ok: true, via: "direct" }));
-    } else {
-      pendingCommands.push({ id: Date.now(), cmd, at: Date.now() });
-      res.writeHead(200, { "Content-Type": "application/json" })
-        .end(JSON.stringify({ ok: true, via: "phone", note: "queued for the camera phone" }));
-    }
-
   } else if (req.method === "GET" && p === "/api/streamctl") {
-    // Camera phone heartbeat: learns whether anyone is watching (to raise its
-    // mirror FPS) and drains queued commands (to execute on the LAN).
-    const drained = pendingCommands.splice(0, pendingCommands.length)
-      .filter((c) => Date.now() - c.at < 60_000)   // stale commands die
-      .map((c) => c.cmd);
+    // Camera phone heartbeat: learns whether anyone is watching so it can
+    // raise its mirror FPS. The dashboard is VIEW-ONLY - no remote commands.
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" })
-      .end(JSON.stringify({ viewers: streamClients.size, commands: drained }));
+      .end(JSON.stringify({ viewers: streamClients.size, commands: [] }));
 
   } else if (req.method === "GET" && p === "/api/lockstatus") {
     if (!ESP32) {
