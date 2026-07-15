@@ -28,3 +28,6 @@ DerivedData/
 dashboard/events.json
 dashboard/event-images/
 dashboard/*.log
+
+# unpublished blog drafts stay local
+blog/
