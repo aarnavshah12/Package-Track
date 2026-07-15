@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: porch-lockbox-dashboard
+    runtime: node
+    rootDir: dashboard
+    startCommand: node server.js
+    plan: free
+    envVars:
+      - key: DASH_TOKEN
+        sync: false   # entered once in the Render UI; never lives in the repo
