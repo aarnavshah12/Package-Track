@@ -35,14 +35,16 @@ MAX_FRAME_DIM = 1280
 # the standing courier inside the zone, and their body center sits at y~0.60.
 # Lower the 0.55s if couriers stand further back; raise them if the street
 # starts triggering detections.
+# 2026-07-16: expanded 1.2x from the polygon's centroid (clamped to the frame)
+# because the tight trace was clipping legitimate detections near the edges.
 PORCH_ZONE = [
-    [0.535, 0.550],
-    [0.292, 0.600],
-    [0.003, 0.912],
-    [0.007, 0.993],
-    [0.802, 0.998],
-    [0.788, 0.790],
-    [0.731, 0.550],
+    [0.552, 0.506],
+    [0.260, 0.566],
+    [0.000, 0.940],
+    [0.000, 1.000],
+    [0.872, 1.000],
+    [0.855, 0.794],
+    [0.787, 0.506],
 ]
 # Webcam milestone testing: None = central 70% of the webcam frame.
 # Switch back to ZONE = PORCH_ZONE when testing porch photos / the real camera.
