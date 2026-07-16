@@ -2,20 +2,7 @@
 
 A self-opening drop box for deliveries. An old iPhone at a window watches the porch with an on-device detection model. When a courier arrives with a package, a cloud Roboflow Workflow confirms it, the phone unlocks the box over home Wi-Fi, the courier drops the package in, the box re-locks itself, and the system verifies the delivery and pushes a photo notification to your phone. A token-protected dashboard shows the live stream and delivery history from anywhere.
 
-```
- iPhone at window                     Roboflow serverless cloud
-┌──────────────────────────┐  1 fps,  ┌─────────────────────────────┐
-│ on-device model (25 fps) │  only    │ workflow: detect → zone →   │
-│ wake gate + state machine│ when ───▶│ per-frame facts             │
-│                          │ awake    │ + event-gated sinks:        │
-│      │ GET /open         │ ◀─ facts │ ntfy push · vision events · │
-│      ▼   (LAN only)      │          │ dataset upload (retraining) │
-│ ESP32 + relay + solenoid │          └─────────────────────────────┘
-└──────────┬───────────────┘
-           │ frames + event photos            browsers anywhere
-           ▼                                        ▲
-      dashboard server (LAN or Render) ── MJPEG ────┘
-```
+![How the porch lockbox handles a delivery](docs/delivery-flow.png)
 
 Design rules:
 
