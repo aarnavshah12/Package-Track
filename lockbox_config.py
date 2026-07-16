@@ -27,24 +27,15 @@ MAX_FRAME_DIM = 1280
 #   [[fx, fy], ...]   -> NORMALIZED 0-1 fractions of frame width/height (resolution-independent)
 #   [[x, y], ...]     -> raw pixel coords of the (already downscaled) frames this client sends
 #
-# PORCH_ZONE below is your traced porch polygon (originally [[1617,2582],[884,2840],
-# [9,3677],[20,4002],[2426,4024],[2382,3187],[2211,2692]] on the 3024x4032 iPhone
-# photos), converted to normalized fractions so it works at any resolution.
-# Top three vertices raised from your trace (0.64/0.704/0.668 -> 0.55/0.60/0.55):
-# your polygon covered where packages LAND, but the unlock condition also needs
-# the standing courier inside the zone, and their body center sits at y~0.60.
-# Lower the 0.55s if couriers stand further back; raise them if the street
-# starts triggering detections.
-# 2026-07-16: expanded 1.2x from the polygon's centroid (clamped to the frame)
-# because the tight trace was clipping legitimate detections near the edges.
+# PORCH_ZONE: normalized 0-1 fractions of the sent frame, scaled to pixels per
+# request. Plain rectangle: full width, bottom 3/4 of the frame (top quarter
+# excluded) - simple and forgiving while tuning detection.
+# Raise the 0.25 top edge if the street/sidewalk starts triggering detections.
 PORCH_ZONE = [
-    [0.552, 0.506],
-    [0.260, 0.566],
-    [0.000, 0.940],
+    [0.000, 0.250],
+    [1.000, 0.250],
+    [1.000, 1.000],
     [0.000, 1.000],
-    [0.872, 1.000],
-    [0.855, 0.794],
-    [0.787, 0.506],
 ]
 # Webcam milestone testing: None = central 70% of the webcam frame.
 # Switch back to ZONE = PORCH_ZONE when testing porch photos / the real camera.
