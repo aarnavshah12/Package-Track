@@ -1,255 +1,169 @@
-# Porch Pirate Defense Lockbox — Vision System
+# Porch package lockbox
 
-A window-mounted camera watches the porch. When a courier arrives with a package, a
-cloud Roboflow Workflow detects it, this client unlocks the drop box over the LAN,
-verifies the package went inside, re-locks, and records the event with photos —
-into Roboflow Vision Events (the future app's alert/history feed), the dataset
-(retraining), and a local `events/` folder.
+A self-opening drop box for deliveries. An old iPhone at a window watches the porch with an on-device detection model. When a courier arrives with a package, a cloud Roboflow Workflow confirms it, the phone unlocks the box over home Wi-Fi, the courier drops the package in, the box re-locks itself, and the system verifies the delivery and pushes a photo notification to your phone. A token-protected dashboard shows the live stream and delivery history from anywhere.
 
 ```
-camera client (Mac now, iPhone later)          Roboflow serverless cloud
-┌─────────────────────────────────┐   frames   ┌────────────────────────────────┐
-│ wake gate (motion / on-device)  │ ─ ~1 fps ─▶│ workflow: aarnavs-space/       │
-│ STATE MACHINE (dwell, latch,    │ ◀─ facts ──│   package-track                │
-│ grace timer, verify, dedup)     │            │ detect → rename → zone →       │
-│        │ GET /pulse             │   event-   │ per-frame facts + gated sinks  │
-│        ▼                        │   tagged   │ (vision events = alert feed,   │
-│ ESP32 + solenoid (LAN only)     │ ─ frame ──▶│  dataset upload = retraining)  │
-└─────────────────────────────────┘            └────────────────────────────────┘
+ iPhone at window                     Roboflow serverless cloud
+┌──────────────────────────┐  1 fps,  ┌─────────────────────────────┐
+│ on-device model (25 fps) │  only    │ workflow: detect → zone →   │
+│ wake gate + state machine│ when ───▶│ per-frame facts             │
+│                          │ awake    │ + event-gated sinks:        │
+│      │ GET /open         │ ◀─ facts │ ntfy push · vision events · │
+│      ▼   (LAN only)      │          │ dataset upload (retraining) │
+│ ESP32 + relay + solenoid │          └─────────────────────────────┘
+└──────────┬───────────────┘
+           │ frames + event photos            browsers anywhere
+           ▼                                        ▲
+      dashboard server (LAN or Render) ── MJPEG ────┘
 ```
 
-**Why the state machine is client-side (resolved, not assumed):** the hosted
-serverless Workflow API is stateless per request — Roboflow's own docs state that
-stateful video blocks reset between HTTP calls and that sink `cooldown_seconds`
-"will have no effect for processing HTTP requests". So the Workflow returns clean
-**per-frame facts** and this client owns dwell counting, the unlock latch, the
-grace timer, `package_in_box`, and one-event-one-notification dedup. (Server-side
-state would require an InferencePipeline video deployment — a documented upgrade
-path, not needed for v1.) Notifications still fire *server-side*: when the client
-decides a terminal event happened, it re-sends that one deciding frame with
-`client_event` set, which un-gates the vision-event / dataset-upload branch
-exactly once. (An email block existed here originally per the first spec; it was
-descoped 2026-07-14 — the final product surfaces alerts in the app via Vision
-Events instead.)
+Design rules:
 
-## Files
+- **Nothing on the internet can reach the lock.** The ESP32 answers only on the home LAN; the only caller is the phone standing next to it. Remote dashboard buttons work by queueing a command that the phone picks up and executes locally.
+- **The cloud is stateless; the phone owns all state.** The workflow judges single frames and returns booleans; dwell timing, the unlock latch, grace windows, and verification live in the client state machine.
+- **The cloud only runs when something happens.** The on-device model gates streaming: a vehicle arriving, a person + package, or a lingering person wakes it; 30 quiet seconds puts it back to sleep. Unlocking always requires cloud-confirmed facts, never the on-device opinion alone.
 
-| File | Purpose |
+## What's in the repo
+
+| Path | What it is |
 |---|---|
-| `lockbox_client.py` | Phase B client: webcam loop, state machine, ESP32, events. Also the Phase A photo-test tool (`--image`) and offline test suite (`--selftest`, 12 scenarios). |
-| `lockbox_config.py` | Every tunable (model, zone, confidences, dwell, grace, gate, ESP32 timing). |
-| `workflow_spec.json` | Source of truth for the deployed workflow definition. |
-| `.env` (create from `.env.example`) | `ROBOFLOW_API_KEY` (private key) + `ESP32_IP`. Never commit. |
-| `events/` | Triggering frames + `events.jsonl` (history feed + retraining data). |
-| `state.json` | Persists `package_in_box` across restarts. |
+| `esp32_lockbox/esp32_lockbox.ino` | Lock firmware: Wi-Fi web server with `/open`, `/pulse`, `/toggle`, `/status`, mDNS (`lockbox.local`), self-closing open window, 30 s thermal watchdog |
+| `workflow_spec.json` | The complete cloud workflow definition (paste into the Roboflow Workflows JSON editor) |
+| `ios/Roboflow Starter Project/` | The camera/brain iPhone app (Xcode project, Swift Package Manager) |
+| `dashboard/` | Zero-dependency Node server + single-page UI: MJPEG live stream, event gallery, remote lock buttons |
+| `render.yaml` | One-click Render deploy blueprint for the dashboard |
+| `lockbox_client.py` / `lockbox_config.py` | The same brain as a Python script for a Mac webcam — test the full pipeline without the phone. Also a still-photo test tool (`--image`) and offline test suite (`--selftest`) |
+| `.env.example` | Template for local secrets (`ROBOFLOW_API_KEY`, `ESP32_IP`, `NTFY_TOPIC`, `DASH_TOKEN`) |
 
-## Setup (one time)
+**Secrets convention:** nothing sensitive is committed. Every file that needs a credential has a committed template next to it — `.env.example` → `.env`, `esp32_lockbox/credentials.example.h` → `credentials.h`, `ios/.../LockboxSecrets.example.swift.txt` → `LockboxSecrets.swift`. The real files are gitignored.
+
+## Hardware
+
+| Part | Notes |
+|---|---|
+| ESP32 dev board | Any devkit clone |
+| 5V single-channel relay module | One with a high/low-level trigger jumper |
+| 12V **fail-secure** solenoid lock | Spring-extended bolt; energize to retract. Unpowered = locked |
+| 12V 2A DC adapter | Powers the solenoid through the relay |
+| Box + wooden flap + hinge + flat furniture braces | Braces stop the flap being pushed inward AND act as the strike plate the bolt locks over |
+| Old iPhone (XS or newer) + window mount | The camera/brain |
+
+Wiring — two circuits that never share a wire:
+
+```
+ESP32 5V   → relay VCC          12V adapter (+) → relay COM
+ESP32 GND  → relay GND          relay NO        → solenoid (+)
+ESP32 GPIO4→ relay IN           solenoid (−)    → 12V adapter (−)
+```
+
+Use the relay's **NO** (normally open) terminal so the coil is cold and the box is locked by default. After flashing, the relay LED must be **off** at idle — if it isn't, move the trigger jumper to the other position or flip `RELAY_ACTIVE_LOW` at the top of the firmware (the constant and the jumper must agree).
+
+## Setup
+
+Do these in order. Each step is independently testable.
+
+### 1. Flash the ESP32
+
+1. Open `esp32_lockbox/esp32_lockbox.ino` in Arduino IDE (install ESP32 board support if needed).
+2. `cp credentials.example.h credentials.h` and enter your Wi-Fi name/password.
+3. Select your board + port and upload. (If upload fails at high speed, drop Upload Speed to 115200 and hold BOOT during the "Connecting…" dots.)
+4. Test from any browser on your Wi-Fi: `http://lockbox.local/pulse` should clunk the bolt for 1 s. `http://lockbox.local/` serves a minimal control page; `/status` returns JSON.
+
+Endpoints: `/open` (13 s delivery window, closes on its own timer), `/pulse` (1 s test), `/toggle` (manual, 30 s auto-relock), `/status`. The firmware also force-releases the coil after 30 s continuous — solenoids are pulse-duty parts.
+
+Tip: give the ESP32 a DHCP reservation in your router so its IP never changes, or use `lockbox.local` everywhere.
+
+### 2. Train the model
+
+1. Create a free [Roboflow](https://roboflow.com) project; start from a packages dataset on [Universe](https://universe.roboflow.com) and add photos of **your own porch** from the camera's actual mounting position (you holding a box, box on the ground, empty porch).
+2. Train — RF-DETR works well. You get a model ID like `your-project/1`. **Use the two-segment `project/version` form everywhere** — the API rejects workspace-prefixed IDs.
+3. Note your model's class names (visible in the training results). If it emits numeric names, list them as-is in the configs below; the workflow renames them.
+
+### 3. Trace your porch zone
+
+1. Grab a frame from the mounted camera and outline your porch in [Polygon Zone](https://polygonzone.roboflow.com). Draw it where couriers *stand*, not just where packages land — a person's center point sits waist-high.
+2. Normalize the pixel points (divide x by image width, y by height) to get 0–1 fractions, e.g. `[[0.53, 0.55], [0.29, 0.60], ...]`.
+3. That list goes into `LockboxConfig.swift` (`zoneNormalized`) and/or `lockbox_config.py` (`PORCH_ZONE`). Clients rescale it to each frame at request time — the workflow itself never needs editing when the camera moves.
+
+### 4. Deploy the workflow
+
+1. In Roboflow: Workflows → Create → open the JSON editor → paste `workflow_spec.json`.
+2. Replace the personal values with yours: the detection step's `model_id` default, `raw_classes` (your model's class names), the rename map (only needed for numeric class names), the dataset-upload `target_project`, and the Vision Events use case.
+3. Save/deploy. Your endpoint is `https://serverless.roboflow.com/infer/workflows/<workspace>/<workflow-slug>`.
+4. Test in the editor preview with still photos: you holding a box inside the zone should return `person_with_package: true`.
+
+The pipeline: detection → class filter → rename → zone filter (center-in-polygon) → a small Python facts block → visualizations → three sinks gated on `client_event` (ntfy webhook push, Vision Events history, dataset upload for retraining). Regular frames return facts only; when the client reaches a verdict it re-sends that one frame with `client_event` set, which fires all three sinks exactly once.
+
+Request parameters (the client sends all of these on every call): `model_id`, `zone` (pixel coords of the sent frame), `min_confidence` (0.4), `person_confidence` (0.45), `package_confidence` (0.59), `raw_classes`, `client_event` (`none` | `delivery_confirmed` | `delivery_failed_package_on_ground`), `disable_upload` (`false` only on event calls), `ntfy_topic`.
+
+Response facts: `person_in_zone`, `package_in_zone`, `person_with_package`, `person_count`, `package_count`, `max_person_confidence`, `max_package_confidence`, `boxes`, `event_ack`.
+
+Note: the serverless API caches workflow definitions for ~15 minutes — after editing the workflow, either wait or send `use_cache: false` while testing.
+
+### 5. Build the iPhone app
+
+Requirements: a Mac with Xcode, an Apple ID, an iPhone on iOS 16.6+ (XS or newer).
+
+1. Open `ios/Roboflow Starter Project/Roboflow Starter Project.xcodeproj`. Xcode auto-resolves the single dependency (`roboflow-swift`, via Swift Package Manager) on first open.
+2. In `ViewController.swift`, set `API_KEY` (your **publishable** `rf_...` key — safe to embed; it can only download models), `MODEL`, and `VERSION`. On first launch the SDK downloads a CoreML build of your model to the phone and caches it; detection then runs fully on-device.
+3. In `LockboxConfig.swift`, set `workflowURL` (your workspace + workflow slug), `modelId`, `rawClasses`, `zoneNormalized`, and review the timings. `graceSeconds` ships at 15 for bench testing — set it to ~90 for a real porch.
+4. Copy `LockboxSecrets.example.swift.txt` → `LockboxSecrets.swift` (gitignored) and fill in: your **private** Roboflow API key (used for workflow calls), the ESP32 host, your ntfy topic, and the dashboard URL + token.
+5. Signing & Capabilities → Automatically manage signing → select your team (add your Apple ID under Xcode Settings → Accounts) → set a unique bundle identifier.
+6. On the phone: enable Developer Mode (Settings → Privacy & Security), plug in, select the phone as run destination, press ▶. First install: Settings → General → VPN & Device Management → Trust. Free Apple IDs re-sign every 7 days (press ▶ again); a paid developer account makes it yearly.
+7. Mount the phone at a window facing the porch and plug it into power. The app keeps its own screen awake.
+
+The app is the wake gate (streams to the cloud only on a vehicle arrival, person+package, or a lingering person), the state machine (dwell → 5 s countdown → `/open` → verification vote → event), and the dashboard's frame source. The camera phone's screen deliberately has **no unlock button** — it's the one device a stranger could touch, so all control lives behind the dashboard token.
+
+### 6. Run the dashboard
+
+Local (same LAN as the ESP32 — buttons hit the lock directly):
 
 ```bash
-# 0. Accept the Xcode license — the system python3 and git are blocked until you do:
-sudo xcodebuild -license accept
+DASH_TOKEN=$(openssl rand -hex 8) node dashboard/server.js   # or put DASH_TOKEN in .env
+# open http://localhost:8321 and enter the token
+```
 
-# 1. Python deps
-cd "~/Documents/Package Track"
+Cloud (watch from anywhere — buttons relay through the phone):
+
+1. Push your fork to GitHub, then on [render.com](https://render.com): New → Blueprint → connect the repo. Render reads `render.yaml`.
+2. Enter `DASH_TOKEN` when prompted (it never lives in the repo).
+3. Put the resulting URL + token into `LockboxSecrets.swift` and rebuild the app. The phone starts mirroring on its own.
+
+How it works: the phone POSTs JPEG frames; the server rebroadcasts them to browsers as an MJPEG stream. The phone checks in every 3 s — if nobody is watching it sends 1 frame per 20 s, and it ramps to ~8 fps when a viewer connects. The same check-in drains queued button commands (`open` / `pulse` / `box_emptied`), which the phone executes on the LAN; unclaimed commands expire after 60 s.
+
+### 7. Turn on notifications
+
+1. Pick a long, unguessable topic name — it acts as a password (e.g. `porch-lockbox-a1b2c3`).
+2. Put it in `.env` (`NTFY_TOPIC`) and `LockboxSecrets.swift` (`ntfyTopic`).
+3. Install the [ntfy](https://ntfy.sh) app on every phone that should get alerts and subscribe to the topic.
+
+Both verdicts push, with a photo: *delivered* ✅ and *left outside* ⚠️.
+
+### 8. (Optional) Test everything with a Mac webcam first
+
+`lockbox_client.py` is the whole phone app as a Python script — useful for proving the pipeline before the phone or box exist:
+
+```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 2. Secrets
-cp .env.example .env   # then edit: your PRIVATE Roboflow API key + the ESP32's LAN IP
-
-# 3. Sanity check (no camera/network needed) — expect "12/12 passed"
-python3 lockbox_client.py --selftest
-
-# 4. (Recommended) git — the repo isn't initialized yet because of the license block:
-git init && git add -A && git commit -m "phase A+B"
+cp .env.example .env        # private API key, ESP32 IP, ntfy topic
+python3 lockbox_client.py --selftest    # offline state-machine tests
+python3 lockbox_client.py               # live: webcam → cloud → ESP32
+python3 lockbox_client.py --image photo.jpg   # single still through the workflow
 ```
 
-## The deployed Workflow (Phase A)
+Walk into frame holding a cardboard box: the console prints the countdown, the solenoid clunks, and after the grace window you get exactly one delivery event. Keys: `e` marks the box emptied, `u` manual pulse, `q` quits.
 
-- **Editor:** https://app.roboflow.com/aarnavs-space/workflows/edit/package-track
-- **Endpoint:** `POST https://serverless.roboflow.com/infer/workflows/aarnavs-space/package-track`
-  ⚠️ The slug changed from `package` to `package-track` during the headless update
-  (the API regenerates the slug from the name). Nothing had shipped against the old
-  URL; everything here uses `package-track`.
+## The delivery sequence
 
-**Pipeline:** RF-DETR detection (`aarnavs-space/package-goilk-zcar8/1`) → keep raw
-classes `["0","80"]` → rename `0→person`, `80→package` (the model emits *numeric*
-class names; this is why the old draft's `class_filter: ["package","person"]`
-detected nothing) → keep detections whose **center** is inside the `zone` polygon
-(pixel coords, per-request parameter) → custom Python facts block (stateless) →
-visualization → two sinks gated on `client_event`/`disable_upload` (Vision Events + dataset upload).
+1. On-device model spots a wake trigger → phone streams 1 fps to the workflow.
+2. Cloud confirms person + package inside the zone for 3 consecutive frames (one missed frame forgiven).
+3. 5-second countdown (there's a sign on the box: "Delivery detected — box opens in 5 seconds").
+4. Phone calls `GET /open`; the ESP32 holds the bolt open 13 s and re-locks on its own timer.
+5. After the grace period, 3 cloud frames vote: zone clear → `delivery_confirmed`; package still visible → `delivery_failed_package_on_ground` (the "go rescue it" alert). A courier returning mid-verification restarts the grace window (capped at 2 extensions).
+6. The verdict frame is re-sent event-tagged → one ntfy push + one Vision Event + one dataset upload (tag `lockbox-event`) for retraining.
+7. 60 s cooldown, then re-armed. A `package_in_box` flag persists across restarts until you press the box-emptied button.
 
-**Request parameters** (all optional; defaults in parentheses — the client sends
-all of them from `lockbox_config.py` on every call):
+## License / disclaimer
 
-| Parameter | Default | Notes |
-|---|---|---|
-| `model_id` | `package-goilk-zcar8/1` | format is `project/version` — NO workspace prefix (the server rejects 3-segment ids). Swappable, e.g. `bearbox/18` (then set `raw_classes` to `["package","person"]`) |
-| `zone` | pass-everything polygon | pixel coords of the frame you send, ≥3 `[x,y]` points |
-| `min_confidence` | 0.4 | model-level floor |
-| `person_confidence` / `package_confidence` | 0.45 / 0.59 | per-class thresholds (F1-optimal on the eval split) |
-| `raw_classes` | `["0","80"]` | class names the model emits, pre-rename |
-| `client_event` | `"none"` | `delivery_confirmed` \| `delivery_failed_package_on_ground` un-gates the vision event |
-| `disable_upload` | `true` | client sets `false` on event calls → dataset upload for retraining |
-| `notify_email` | aarnav.shah@roboflow.com | unused since the email descope; kept for compatibility |
-
-**Sample workflow response** (real output; per-frame calls exclude `output_image`):
-
-```json
-{
-  "person_in_zone": true, "package_in_zone": false, "person_with_package": false,
-  "person_count": 23, "package_count": 0,
-  "max_person_confidence": 0.813, "max_package_confidence": 0,
-  "boxes": [{"class": "person", "confidence": 0.813,
-             "box": {"x_min": 1460, "y_min": 469, "x_max": 1544, "y_max": 641},
-             "center": {"x": 1502, "y": 555}}, "…"],
-  "event_ack": "none",
-  "predictions": {"…": "full inference-format detections (renamed classes)"},
-  "zone_predictions": {"…": "only detections inside the zone"}
-}
-```
-
-**App contract** (what a future consumer app reads — composed by the client, since
-`unlock`/`state`/`package_in_box`/`event` are client-owned):
-
-```json
-{
-  "unlock": true, "state": "UNLOCK_HOLD",
-  "package_in_zone": true, "person_in_zone": true, "person_with_package": true,
-  "package_in_box": false, "event": null,
-  "raw": {"boxes": ["…"], "person_count": 1, "package_count": 1,
-          "max_person_confidence": 0.91, "max_package_confidence": 0.84}
-}
-```
-
-## State machine (client-side)
-
-`ARMED → WAIT_OPEN → UNLOCK_HOLD → VERIFYING → ARMED`, plus a persisted `package_in_box` flag.
-
-- **ARMED** — motion gate may skip cloud calls. `person_with_package` for
-  `DWELL_FRAMES` (3) consecutive frames (1 missed frame tolerated) → WAIT_OPEN.
-- **WAIT_OPEN** — courier-courtesy delay: `PRE_OPEN_SECONDS` (5) for the courier
-  to read the porch sign and step to the box, then `GET http://ESP32_IP/open`
-  (retried until it succeeds).
-- **UNLOCK_HOLD** — the ESP32 physically holds the bolt open for
-  `BOX_OPEN_SECONDS` (13, = `OPEN_HOLD_MS` in the firmware) and re-locks it on
-  its own timer — the client never has to remember to close it, and the firmware's
-  30 s thermal watchdog caps coil time in any failure mode. Logically the client
-  stays latched for `GRACE_SECONDS` (90) before verification.
-- **VERIFYING** — gate bypassed (frames always stream). Courier back with the
-  package → grace restarts (max 2 extensions, then loitering counts as failure).
-  Otherwise majority vote over `VERIFY_FRAMES` (3): package still visible →
-  `delivery_failed_package_on_ground` (alert event); clear →
-  `delivery_confirmed` (success event) + `package_in_box=true` until you press
-  `e` (or `--reset-box`). Sustained network failure → conservative
-  `package_in_box=true`, recorded locally as `verification_inconclusive`.
-- After a terminal event: `EVENT_COOLDOWN_SECONDS` (60) suppresses re-triggering.
-
-Every unlock/event saves a timestamped frame in `events/` + a line in
-`events.jsonl`. Cloud-side, every event also creates a **Vision Event** (use case
-"Package Lockbox Deliveries" — the future app's history feed, ✅ verified live) and a
-**dataset upload** tagged `lockbox-event` into `package-goilk-zcar8` (retraining pool).
-
-## Phase A milestone — your still-photo tests
-
-Take 4 photos at the planned camera angle, then run each through:
-
-```bash
-python3 lockbox_client.py --image porch-photos/person-with-box.jpg
-```
-
-| Photo | person_in_zone | package_in_zone | person_with_package |
-|---|---|---|---|
-| courier holding box in zone | true | true | true |
-| box on ground, nobody | false | true | false |
-| empty porch | false | false | false |
-| person without box | true | false | false |
-
-Then one notification test (logs ONE vision event + one dataset upload):
-
-```bash
-python3 lockbox_client.py --image porch-photos/box-on-ground.jpg --event delivery_failed_package_on_ground
-```
-
-**Pass:** booleans match the table; exactly one new vision event in the
-"Package Lockbox Deliveries" use case (app.roboflow.com → Vision Events); one
-`lockbox-event`-tagged image in the project. If the zone booleans look wrong,
-tune `ZONE`/`PORCH_ZONE` in `lockbox_config.py` (normalized 0-1 coords;
-`None` = central 70% of the frame). ✅ Completed 2026-07-14 with 14 porch photos.
-
-## Phase B milestone — the physical loop
-
-`python3 lockbox_client.py` with the Mac webcam aimed at your test area, ESP32 live:
-
-1. **Happy path:** walk in holding a cardboard box → within ~3 s the console prints
-   `>>> UNLOCK` and the solenoid clicks once → "deliver" the box out of view →
-   ~90 s later exactly one `*** EVENT delivery_confirmed` banner, a new vision
-   event with the photo, `package_in_box=true` badge, and a frame in `events/`.
-2. **No box:** walk through empty-handed → no unlock ever.
-3. **Failure path:** press `e`, repeat with the box, but leave it visible on the
-   ground → after the grace window, one `delivery_failed_package_on_ground` event, no unlock during verification.
-4. **Edge checks:** restart the script (flag persists) · unplug the ESP32 and
-   trigger (ERROR logged, stays ARMED, no crash) · kill Wi-Fi during verification
-   (conservative inconclusive path).
-
-The preview window renders at full camera speed (~30 fps); only `TARGET_FPS` (1)
-frame per second goes to the cloud, so overlays update about once a second while
-the video itself stays smooth. On quit the client prints `sample ticks vs frames
-sent` — the wake-word cost-efficiency metric for the Phase D writeup.
-
-## Known caveats
-
-1. **Email was descoped (2026-07-14):** the final product surfaces alerts inside
-   the app (live view + popups + manual unlock), so the email block was removed
-   from the workflow. Alerts/history live in Vision Events (use case "Package
-   Lockbox Deliveries", queryable by API). Historical note: Roboflow's managed
-   email proxy 500s even for workspace-member recipients — reported-worthy bug.
-2. **`use_cache`:** the serverless API caches workflow definitions ~15 min. After
-   editing the workflow, either wait or flip `"use_cache": False` temporarily in
-   `WorkflowClient.infer`.
-3. **HOG gate** misses close-range/partial bodies (it would fail your own webcam
-   demo) — that's why `GATE_MODE="motion"` is the default. The iPhone (Phase C)
-   replaces this with a real on-device person model.
-
-## Phase C — the iPhone app (`ios/`) ✅
-
-The window camera is an iPhone running the app in `ios/Roboflow Starter Project/`
-(SPM, Roboflow Swift SDK ≥1.2.7, RF-DETR on-device at 24-30 FPS):
-
-- **Tiered wake gate** (on-device, costs nothing): a car/truck *arriving*, a
-  person+package together, or a person present 2+ frames → start streaming
-  1 fps to the cloud workflow; 30 quiet seconds → sleep. Tiers only control
-  *watching* — unlocking still requires cloud-confirmed person+package in the
-  zone, the dwell count, and the pre-open countdown.
-- **The same state machine** as the Python client, ported 1:1 and hardened by
-  an adversarial review (retry parity, kiosk keep-awake, suspension-safe timers).
-- **Activity tab** with photos of every delivery moment (also mirrored to the
-  dashboard and to Roboflow Vision Events).
-- Setup: copy `LockboxSecrets.example.swift.txt` → `LockboxSecrets.swift`, fill
-  in, build onto a physical iPhone (camera required).
-
-## Notifications (`ntfy`) ✅
-
-The workflow itself pushes on every delivery verdict (webhook → ntfy.sh).
-Subscribe from any phone: install the ntfy app → Subscribe → your `NTFY_TOPIC`
-value. Both outcomes push: *delivered* ✅ and *left outside* ⚠️. The topic name
-is effectively a password — don't publish it.
-
-## Household dashboard (`dashboard/`) ✅
-
-Zero-dependency Node server + single-page UI: real MJPEG live stream
-(viewer-aware — the phone mirrors ~8 fps while watched, a trickle otherwise),
-event gallery, and lock buttons. Token-protected (`DASH_TOKEN`).
-
-- **Home mode:** run on a Mac on the LAN (`node dashboard/server.js`, port
-  8321) — buttons hit the ESP32 directly.
-- **Cloud mode:** deploy with `render.yaml` (one env var: `DASH_TOKEN`) —
-  watchable from anywhere; buttons queue as commands that the camera phone
-  (always home, always awake) executes on the LAN. The cloud never reaches
-  the lock directly, by design.
-
-## Phase D — next
-
-Tune zone/thresholds on real porch frames; retrain on the
-`lockbox-event`-tagged uploads; metrics = the app's frames-saved stats + model
-evals before/after porch fine-tuning.
+Personal project; use at your own risk. A solenoid parcel box deters casual theft — it is not a safe.
