@@ -16,8 +16,10 @@ enum LockboxConfig {
     static let modelId = "package-goilk-zcar8/1"
     static let rawClasses = ["0", "80"]          // model's numeric class names pre-rename
     static let minConfidence = 0.4
-    static let personConfidence = 0.45
-    static let packageConfidence = 0.59
+    // Matched to the on-device overlay threshold (0.5 in ViewController) so the
+    // cloud verdict agrees with the boxes on screen.
+    static let personConfidence = 0.5
+    static let packageConfidence = 0.5
 
     // Porch zone, normalized 0-1 (same polygon as PORCH_ZONE in lockbox_config.py).
     // Scaled to the sent frame's pixel size at request time.

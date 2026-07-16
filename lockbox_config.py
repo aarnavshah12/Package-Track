@@ -14,8 +14,10 @@ WORKFLOW_TIMEOUT_SECONDS = 15
 MODEL_ID = "package-goilk-zcar8/1"     # project/version (NO workspace prefix); swappable, e.g. "bearbox/18" or "yolov8n-640"
 RAW_CLASSES = ["0", "80"]              # class names the model emits BEFORE rename (0=person, 80=package)
 MIN_CONFIDENCE = 0.4                   # model-level floor
-PERSON_CONFIDENCE = 0.45               # per-class threshold (F1-optimal on the eval split)
-PACKAGE_CONFIDENCE = 0.59
+# Matched to the iOS on-device overlay threshold (0.5) so cloud verdicts agree
+# with the boxes drawn on screen. (F1-optimal values were 0.45 / 0.59.)
+PERSON_CONFIDENCE = 0.5
+PACKAGE_CONFIDENCE = 0.5
 NOTIFY_EMAIL = "aarnav.shah@roboflow.com"
 
 # Frames longer than this on their longest side get downscaled before use
