@@ -30,12 +30,11 @@ MAX_FRAME_DIM = 1280
 #   [[x, y], ...]     -> raw pixel coords of the (already downscaled) frames this client sends
 #
 # PORCH_ZONE: normalized 0-1 fractions of the sent frame, scaled to pixels per
-# request. Plain rectangle: full width, bottom 3/4 of the frame (top quarter
-# excluded) - simple and forgiving while tuning detection.
-# Raise the 0.25 top edge if the street/sidewalk starts triggering detections.
+# request. FULL FRAME while debugging - the zone filters nothing.
+# Shrink back (e.g. top edge 0.25) once detection is confirmed working.
 PORCH_ZONE = [
-    [0.000, 0.250],
-    [1.000, 0.250],
+    [0.000, 0.000],
+    [1.000, 0.000],
     [1.000, 1.000],
     [0.000, 1.000],
 ]

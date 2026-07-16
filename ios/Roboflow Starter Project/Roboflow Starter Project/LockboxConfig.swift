@@ -23,10 +23,10 @@ enum LockboxConfig {
 
     // Porch zone, normalized 0-1 (same polygon as PORCH_ZONE in lockbox_config.py).
     // Scaled to the sent frame's pixel size at request time.
-    // Plain rectangle: full width, bottom 3/4 of the frame (top quarter excluded).
-    // Raise the 0.25 top edge if the street starts triggering detections.
+    // FULL FRAME while debugging: every detection counts, the zone filters nothing.
+    // Shrink this back (e.g. top edge 0.25) once detection is confirmed working.
     static let zoneNormalized: [[Double]] = [
-        [0.000, 0.250], [1.000, 0.250], [1.000, 1.000], [0.000, 1.000],
+        [0.000, 0.000], [1.000, 0.000], [1.000, 1.000], [0.000, 1.000],
     ]
 
     static func zonePixels(width: Int, height: Int) -> [[Int]] {
